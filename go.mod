@@ -1,4 +1,4 @@
-module github.com/bagus2x/room-chat
+module github.com/bagus2x/rancot-backend
 
 go 1.13
 
