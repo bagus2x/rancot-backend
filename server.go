@@ -5,124 +5,42 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
-	"time"
 
-	"github.com/gorilla/websocket"
+	h "github.com/bagus2x/rancot-backend/helpers"
 )
 
-const (
-	// TypeNewUser -
-	TypeNewUser = iota
-	// TypeNewMessage -
-	TypeNewMessage
-	// TypeUserLeaveChat -
-	TypeUserLeaveChat
-)
-
-// PayloadRequest -
-type PayloadRequest struct {
-	Message string
-}
-
-// PayloadResponse -
-type PayloadResponse struct {
-	Type    int    `json:"type"`
-	Sender  string `json:"sender"`
-	Time    int64  `json:"time"`
-	Message string `json:"message"`
-}
-
-// UserConnection -
-type UserConnection struct {
-	*websocket.Conn
-	Username string
-	Room     string
-}
-
-var connections = make([]*UserConnection, 0)
-
-func handleReadWrite(currConn *UserConnection) {
-	defer func() {
-		if err := recover(); err != nil {
-			log.Println("ERR:", err)
+// CORSMiddleware -
+func CORSMiddleware(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Max-Age", "86400")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE, UPDATE")
+		w.Header().Set("Access-Control-Expose-Headers", "Content-Length")
+		w.Header().Set("Access-Control-Allow-Headers", "X-Requested-With, Content-Type, Origin, Authorization, Accept, Client-Security-Token, Accept-Encoding, x-access-token")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		if r.Method == "OPTIONS" {
+			fmt.Println("OPTIONS")
+			http.Error(w, "", 200)
+		} else {
+			h.ServeHTTP(w, r)
 		}
-	}()
-
-	broadcast(currConn, PayloadResponse{
-		Message: fmt.Sprintf("%s join the chat", currConn.Username),
-		Sender:  currConn.Username,
-		Time:    time.Now().Unix(),
-		Type:    TypeNewUser,
 	})
 
-	for {
-		p := PayloadRequest{}
-		err := currConn.ReadJSON(&p)
-		if err != nil {
-			if err != nil {
-				if strings.Contains(err.Error(), "websocket: close") {
-					broadcast(currConn, PayloadResponse{
-						Message: fmt.Sprintf("%s has left the chat", currConn.Username),
-						Sender:  currConn.Username,
-						Time:    time.Now().Unix(),
-						Type:    TypeUserLeaveChat,
-					})
-					deleteConnection(currConn)
-					return
-				}
-				log.Println("Err:", err.Error())
-				continue
-			}
-		}
-
-		broadcast(currConn, PayloadResponse{
-			Message: p.Message,
-			Sender:  currConn.Username,
-			Time:    time.Now().Unix(),
-			Type:    TypeNewMessage,
-		})
-		log.Println(len(connections))
-	}
-}
-
-func broadcast(currConn *UserConnection, pr PayloadResponse) {
-	for _, conn := range connections {
-		if conn.Room == currConn.Room && conn.Username != currConn.Username {
-			conn.WriteJSON(pr)
-		}
-	}
-}
-
-func deleteConnection(currConn *UserConnection) {
-	filteredConn := make([]*UserConnection, 0)
-	for _, conn := range connections {
-		if currConn != conn {
-			filteredConn = append(filteredConn, conn)
-		}
-	}
-	connections = filteredConn
 }
 
 func main() {
-	http.HandleFunc("/api/ws", func(w http.ResponseWriter, r *http.Request) {
-		room := r.URL.Query().Get("room")
-		username := r.URL.Query().Get("username")
-		if len(room) < 4 || len(username) < 4 {
-			http.Error(w, "Err: Status Unpsrocessable Entity", http.StatusUnprocessableEntity)
-			return
-		}
-		conn, err := websocket.Upgrade(w, r, w.Header(), 1024, 1024)
-		if err != nil {
-			http.Error(w, "Failed open ws connection", http.StatusBadRequest)
-			return
-		}
-
-		currConn := UserConnection{Conn: conn, Username: username, Room: room}
-		connections = append(connections, &currConn)
-
-		go handleReadWrite(&currConn)
+	gm := new(h.GeMux)
+	gm.Use(CORSMiddleware)
+	gm.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("Hello, mamank"))
 	})
+
+	gm.HandleFunc("/api/ws", h.WS)
 	port := os.Getenv("PORT")
-	log.Fatal(http.ListenAndServe(":"+port, nil))
+	svr := http.Server{
+		Addr:    ":" + port,
+		Handler: gm,
+	}
+	log.Println("server running on port", port)
+	log.Fatal(svr.ListenAndServe())
 }
