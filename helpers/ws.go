@@ -107,7 +107,7 @@ func WS(w http.ResponseWriter, r *http.Request) {
 	room := r.URL.Query().Get("room")
 	username := r.URL.Query().Get("username")
 	if len(room) < 4 || len(username) < 4 {
-		http.Error(w, "Err: Status Unpsrocessable Entity", http.StatusUnprocessableEntity)
+		http.Error(w, "Err: Status Unprocessable Entity", http.StatusUnprocessableEntity)
 		return
 	}
 	conn, err := websocket.Upgrade(w, r, w.Header(), 1024, 1024)
